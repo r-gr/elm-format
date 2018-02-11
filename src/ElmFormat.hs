@@ -1,117 +1,53 @@
 {-# OPTIONS_GHC -Wall #-}
 module ElmFormat where
 
-import Elm.Utils ((|>))
-import System.Exit (exitFailure, exitSuccess)
+import Prelude hiding (putStr, putStrLn)
+
+import System.Exit (ExitCode(..))
+import System.Environment (getArgs)
 import Messages.Types
-import Control.Monad (when)
-import Data.Maybe (isJust)
-import CommandLine.Helpers
-import ElmVersion (ElmVersion)
+import Messages.Formatter.Format
+import Control.Monad.Free
+import qualified CommandLine.Helpers as Helpers
+import ElmVersion
+import ElmFormat.FileStore (FileStore)
+import ElmFormat.FileWriter (FileWriter)
+import ElmFormat.InputConsole (InputConsole)
+import ElmFormat.OutputConsole (OutputConsole)
+import ElmFormat.World
 
-
-import qualified AST.Module
 import qualified Flags
-import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8 as Char8
-import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
+import qualified ElmFormat.Execute as Execute
+import qualified ElmFormat.InputConsole as InputConsole
 import qualified ElmFormat.Parse as Parse
 import qualified ElmFormat.Render.Text as Render
+import qualified ElmFormat.FileStore as FileStore
+import qualified ElmFormat.FileWriter as FileWriter
 import qualified ElmFormat.Filesystem as FS
-import qualified Reporting.Error.Syntax as Syntax
+import qualified ElmFormat.OutputConsole as OutputConsole
+import qualified ElmFormat.Version
+import qualified Options.Applicative as Opt
 import qualified Reporting.Result as Result
-import qualified System.Directory as Dir
 
 
--- If elm-format was successful and formatted result differ
--- from original content, writes the results to the output file.
--- Otherwise, display errors and exit
-writeResult
-    :: ElmVersion
-    -> Destination
-    -> FilePath
-    -> Text.Text
-    -> Result.Result () Syntax.Error AST.Module.Module
-    -> IO (Maybe Bool)
-writeResult elmVersion destination inputFile inputText result =
-    case result of
-        Result.Result _ (Result.Ok modu) ->
-            let
-                renderedText =
-                    Render.render elmVersion modu
-                rendered =
-                    renderedText
-                        |> Text.encodeUtf8
-            in
-                case destination of
-                    UpdateInPlace ->
-                        (Char8.putStr rendered)
-                        >> (return Nothing)
-
-                    ValidateOnly ->
-                        if inputText /= renderedText then
-                            (putStrLn $ r $ FileWouldChange inputFile)
-                            >> (return $ Just False)
-                        else
-                            return $ Just True
-
-                    ToFile path ->
-                        let
-                            shouldWriteToFile =
-                                inputFile /= path || inputText /= renderedText
-                        in
-                            if shouldWriteToFile then
-                                (ByteString.writeFile path rendered)
-                                >> (return Nothing)
-                            else
-                                return Nothing
-
-        Result.Result _ (Result.Err errs) ->
-            do
-                showErrors inputFile (Text.unpack inputText) errs
-                exitFailure
-
-
-processTextInput :: ElmVersion -> Destination -> FilePath -> Text.Text -> IO (Maybe Bool)
-processTextInput elmVersion destination inputFile inputText =
-    Parse.parse inputText
-        |> writeResult elmVersion destination inputFile inputText
-
-
-processFileInput :: ElmVersion -> FilePath -> Destination -> IO (Maybe Bool)
-processFileInput elmVersion inputFile destination =
-    do
-        inputText <- fmap Text.decodeUtf8 $ ByteString.readFile inputFile
-        processTextInput elmVersion destination inputFile inputText
-
-
-isEitherFileOrDirectory :: FilePath -> IO Bool
-isEitherFileOrDirectory path = do
-    fileExists <- Dir.doesFileExist path
-    dirExists <- Dir.doesDirectoryExist path
-    return $ fileExists || dirExists
-
-
-resolveFile :: FilePath -> IO (Either InputFileMessage [FilePath])
+resolveFile :: FileStore f => FilePath -> Free f (Either InputFileMessage [FilePath])
 resolveFile path =
     do
-        isFile <- Dir.doesFileExist path
-        isDirectory <- Dir.doesDirectoryExist path
+        fileType <- FileStore.stat path
 
-        case (isFile, isDirectory) of
-            ( True, _ ) ->
+        case fileType of
+            FileStore.IsFile ->
                 return $ Right [path]
 
-            ( _, True ) ->
+            FileStore.IsDirectory ->
                 do
                     elmFiles <- FS.findAllElmFiles path
                     case elmFiles of
                         [] -> return $ Left $ NoElmFiles path
                         _ -> return $ Right elmFiles
 
-            ( False, False ) ->
+            FileStore.DoesNotExist ->
                 return $ Left $ FileDoesNotExist path
 
 
@@ -135,7 +71,7 @@ collectErrors list =
         foldl step (Right []) list
 
 
-resolveFiles :: [FilePath] -> IO (Either [InputFileMessage] [FilePath])
+resolveFiles :: FileStore f => [FilePath] -> Free f (Either [InputFileMessage] [FilePath])
 resolveFiles inputFiles =
     do
         result <- collectErrors <$> mapM resolveFile inputFiles
@@ -147,59 +83,13 @@ resolveFiles inputFiles =
                 return $ Right $ concat files
 
 
-handleFilesInput :: [FilePath] -> Maybe FilePath -> Bool -> Bool -> ElmVersion -> IO (Maybe Bool)
-handleFilesInput inputFiles outputFile autoYes validateOnly elmVersion =
-    do
-        elmFiles <- resolveFiles inputFiles
-
-        case elmFiles of
-            Left errors ->
-                do
-                    putStrLn $ r $ BadInputFiles errors
-                    exitFailure
-
-            Right [inputFile] -> do
-                realOutputFile <- decideOutputFile autoYes inputFile outputFile
-                let destination = if validateOnly then ValidateOnly else ToFile realOutputFile
-                putStrLn $ (r $ ProcessingFiles $ [inputFile])
-                processFileInput elmVersion inputFile destination
-
-            Right elmFiles -> do
-                when (isJust outputFile)
-                    exitOnInputDirAndOutput
-
-                canOverwriteFiles <- getApproval autoYes elmFiles
-
-                if canOverwriteFiles
-                    then
-                        let
-                            merge prev next =
-                                case (prev, next) of
-                                    (Nothing, Just b) -> Just b
-                                    (Just b, Nothing) -> Just b
-                                    (Just a, Just b) -> Just $ a && b
-                                    (Nothing, Nothing) -> Nothing
-
-                            dst file =
-                                if validateOnly then
-                                    ValidateOnly
-                                else
-                                    ToFile file
-                        in
-                            do
-                                putStrLn $ (r $ ProcessingFiles elmFiles)
-                                validationResults <- mapM (\file -> processFileInput elmVersion file (dst file)) elmFiles
-                                return $ foldl merge Nothing validationResults
-                    else
-                        return Nothing
-
-
 data WhatToDo
     = FormatToFile FilePath FilePath
     | StdinToFile FilePath
     | FormatInPlace FilePath [FilePath]
     | StdinToStdout
-    | Validate Source
+    | ValidateStdin
+    | ValidateFiles FilePath [FilePath]
 
 
 data Source
@@ -213,140 +103,239 @@ data Destination
     | ToFile FilePath
 
 
-determineSource :: Bool -> [FilePath] -> Either Message Source
+determineSource :: Bool -> Either [InputFileMessage] [FilePath] -> Either ErrorMessage Source
 determineSource stdin inputFiles =
     case ( stdin, inputFiles ) of
-        ( True, [] ) -> Right Stdin
-        ( False, [] ) -> Left Error_NoInputs
-        ( False, first:rest ) -> Right $ FromFiles first rest
-        ( True, _:_ ) -> Left Error_TooManyInputs
+        ( _, Left fileErrors ) -> Left $ BadInputFiles fileErrors
+        ( True, Right [] ) -> Right Stdin
+        ( False, Right [] ) -> Left NoInputs
+        ( False, Right (first:rest) ) -> Right $ FromFiles first rest
+        ( True, Right (_:_) ) -> Left TooManyInputs
 
 
-determineDestination :: Maybe FilePath -> Bool -> Either Message Destination
-determineDestination output validate =
-    case ( output, validate ) of
+determineDestination :: Maybe FilePath -> Bool -> Either ErrorMessage Destination
+determineDestination output doValidate =
+    case ( output, doValidate ) of
         ( Nothing, True ) -> Right ValidateOnly
         ( Nothing, False ) -> Right UpdateInPlace
         ( Just path, False ) -> Right $ ToFile path
-        ( Just _, True ) -> Left Error_OutputAndValidate
+        ( Just _, True ) -> Left OutputAndValidate
 
 
-determineWhatToDo :: Source -> Destination -> Either Message WhatToDo
+determineWhatToDo :: Source -> Destination -> Either ErrorMessage WhatToDo
 determineWhatToDo source destination =
     case ( source, destination ) of
-        ( _, ValidateOnly ) -> Right $ Validate source
+        ( Stdin, ValidateOnly ) -> Right $ ValidateStdin
+        ( FromFiles first rest, ValidateOnly) -> Right $ ValidateFiles first rest
         ( Stdin, UpdateInPlace ) -> Right StdinToStdout
         ( Stdin, ToFile output ) -> Right $ StdinToFile output
         ( FromFiles first [], ToFile output ) -> Right $ FormatToFile first output
         ( FromFiles first rest, UpdateInPlace ) -> Right $ FormatInPlace first rest
-        ( FromFiles _ _, ToFile _ ) -> Left Error_SingleOutputWithMultipleInputs
+        ( FromFiles _ _, ToFile _ ) -> Left SingleOutputWithMultipleInputs
 
 
-determineWhatToDoFromConfig :: Flags.Config -> Either Message WhatToDo
-determineWhatToDoFromConfig config =
+determineWhatToDoFromConfig :: Flags.Config -> Either [InputFileMessage] [FilePath] -> Either ErrorMessage WhatToDo
+determineWhatToDoFromConfig config resolvedInputFiles =
     do
-        source <- determineSource (Flags._stdin config) (Flags._input config)
+        source <- determineSource (Flags._stdin config) resolvedInputFiles
         destination <- determineDestination (Flags._output config) (Flags._validate config)
         determineWhatToDo source destination
 
 
-validate :: ElmVersion -> Source -> IO ()
-validate elmVersion source =
-    do
-        result <-
-            case source of
-                Stdin ->
-                    do
-                        input <- Lazy.getContents
-
-                        Lazy.toStrict input
-                            |> Text.decodeUtf8
-                            |> processTextInput elmVersion ValidateOnly "<STDIN>"
-
-                FromFiles first rest ->
-                    handleFilesInput (first:rest) Nothing True True elmVersion
-
-        case result of
-            Nothing ->
-                error "Validation should always give a result"
-
-            Just True ->
-                exitSuccess
-
-            Just False ->
-                exitFailure
-
-
-exitWithError :: Message -> IO ()
+exitWithError :: World m => ErrorMessage -> m ()
 exitWithError message =
-    (putStrLn $ r $ message)
+    (putStrLn $ Helpers.r $ message)
         >> exitFailure
 
 
+determineVersion :: ElmVersion -> Bool -> Either ErrorMessage ElmVersion
+determineVersion elmVersion upgrade =
+    case (elmVersion, upgrade) of
+        (Elm_0_18, True) ->
+            Right Elm_0_18_Upgrade
+
+        (_, True) ->
+            Left $ MustSpecifyVersionWithUpgrade Elm_0_18_Upgrade
+
+        (_, False) ->
+            Right elmVersion
+
+
+elmFormatVersion :: String
+elmFormatVersion =
+    ElmFormat.Version.asString
+
+
+experimental :: Maybe String
+experimental =
+    ElmFormat.Version.experimental
+
+
+{-| copied from Options.Applicative -}
+handleParseResult :: World m => Opt.ParserResult a -> m (Maybe a)
+handleParseResult (Opt.Success a) = return (Just a)
+handleParseResult (Opt.Failure failure) = do
+      progn <- getProgName
+      let (msg, exit) = Opt.renderFailure failure progn
+      case exit of
+        ExitSuccess -> putStrLn msg *> exitSuccess *> return Nothing
+        _           -> putStrLnStderr msg *> exitFailure *> return Nothing
+handleParseResult (Opt.CompletionInvoked _) = do
+      -- progn <- getProgName
+      -- msg <- Opt.execCompletion compl progn
+      -- putStr msg
+      -- const undefined <$> exitSuccess
+      error "Shell completion not yet implemented"
+
+
 main :: ElmVersion -> IO ()
-main defaultVersion =
+main elmVersion =
     do
-        config <- Flags.parse defaultVersion
-        let autoYes = Flags._yes config
-        let elmVersion = Flags._elmVersion config
+        args <- getArgs
+        main' elmVersion args
 
-        case determineWhatToDoFromConfig config of
-            Left Error_NoInputs ->
-                Flags.showHelpText defaultVersion
-                    >> exitFailure
 
-            Left message ->
-                exitWithError message
+main' :: World m => ElmVersion -> [String] -> m ()
+main' defaultVersion args =
+    main'' defaultVersion elmFormatVersion experimental args
 
-            Right (Validate source) ->
-                validate elmVersion source
-
-            Right (FormatInPlace first rest) ->
+main'' :: World m => ElmVersion -> String -> Maybe String -> [String] -> m ()
+main'' defaultVersion elmFormatVersion_ experimental_ args =
+    do
+        c <- handleParseResult $ Flags.parse defaultVersion elmFormatVersion_ experimental_ args
+        case c of
+            Nothing -> return ()
+            Just config ->
                 do
-                    result <- handleFilesInput (first:rest) Nothing autoYes False elmVersion
-                    case result of
-                        Nothing ->
-                            exitSuccess
+                    let autoYes = Flags._yes config
+                    let elmVersionResult = determineVersion (Flags._elmVersion config) (Flags._upgrade config)
 
-                        Just _ ->
-                            error "There shouldn't be a validation result when formatting"
+                    resolvedInputFiles <- Execute.run (Execute.forHuman autoYes) $ resolveFiles (Flags._input config)
 
-            Right (FormatToFile input output) ->
-                do
-                    result <- handleFilesInput [input] (Just output) autoYes False elmVersion
-                    case result of
-                        Nothing ->
-                            exitSuccess
+                    case (elmVersionResult, determineWhatToDoFromConfig config resolvedInputFiles) of
+                        (_, Left NoInputs) ->
+                            (handleParseResult $ Flags.showHelpText defaultVersion elmFormatVersion_ experimental_)
+                                >> exitFailure
 
-                        Just _ ->
-                            error "There shouldn't be a validation result when formatting"
+                        (_, Left message) ->
+                            exitWithError message
 
-            Right (StdinToStdout) ->
-                do
-                    input <- Lazy.getContents
+                        (Left message, _) ->
+                            exitWithError message
 
-                    result <-
-                        Lazy.toStrict input
-                            |> Text.decodeUtf8
-                            |> processTextInput elmVersion UpdateInPlace "<STDIN>"
-                    case result of
-                        Nothing ->
-                            exitSuccess
+                        (Right elmVersion, Right whatToDo) ->
+                            do
+                                let run = case (Flags._validate config) of
+                                      True -> Execute.run $ Execute.forMachine elmVersion True
+                                      False -> Execute.run $ Execute.forHuman autoYes
+                                result <-  run $ doIt elmVersion whatToDo
+                                if result
+                                    then exitSuccess
+                                    else exitFailure
 
-                        Just _ ->
-                            error "There shouldn't be a validation result when formatting"
 
-            Right (StdinToFile output) ->
-                do
-                    input <- Lazy.getContents
+validate :: ElmVersion -> (FilePath, Text.Text) -> Either InfoMessage ()
+validate elmVersion (inputFile, inputText) =
+    case Parse.parse inputText of
+        Result.Result _ (Result.Ok modu) ->
+            if inputText /= Render.render elmVersion modu then
+                Left $ FileWouldChange inputFile
+            else
+                Right ()
 
-                    result <-
-                        Lazy.toStrict input
-                            |> Text.decodeUtf8
-                            |> processTextInput elmVersion (ToFile output) "<STDIN>"
-                    case result of
-                        Nothing ->
-                            exitSuccess
+        Result.Result _ (Result.Err errs) ->
+            Left $ ParseError inputFile (Text.unpack inputText) errs
 
-                        Just _ ->
-                            error "There shouldn't be a validation result when formatting"
+
+data FormatResult
+    = NoChange FilePath Text.Text
+    | Changed FilePath Text.Text
+
+format :: ElmVersion -> (FilePath, Text.Text) -> Either InfoMessage FormatResult
+format elmVersion (inputFile, inputText) =
+    case Parse.parse inputText of
+        Result.Result _ (Result.Ok modu) ->
+            let
+                outputText = Render.render elmVersion modu
+            in
+            Right $
+                if inputText == outputText
+                    then NoChange inputFile outputText
+                    else Changed inputFile outputText
+
+        Result.Result _ (Result.Err errs) ->
+            Left $ ParseError inputFile (Text.unpack inputText) errs
+
+
+readStdin :: InputConsole f => Free f (FilePath, Text.Text)
+readStdin =
+    (,) "<STDIN>" <$> InputConsole.readStdin
+
+
+readFile :: (FileStore f, InfoFormatter f) => FilePath -> Free f (FilePath, Text.Text)
+readFile filePath =
+    onInfo (ProcessingFile filePath)
+        *> ((,) filePath <$> FileStore.readFile filePath)
+
+
+getOutputText :: FormatResult -> Text.Text
+getOutputText result =
+    case result of
+        NoChange _ text -> text
+        Changed _ text -> text
+
+
+updateFile :: FileWriter f => FormatResult -> Free f ()
+updateFile result =
+    case result of
+        NoChange _ _ -> return ()
+        Changed outputFile outputText -> FileWriter.overwriteFile outputFile outputText
+
+
+logError :: InfoFormatter f => Either InfoMessage () -> Free f Bool
+logError result =
+    case result of
+        Left message ->
+            onInfo message *> return False
+
+        Right () ->
+            return True
+
+
+logErrorOr :: InfoFormatter f => (a -> Free f ()) -> Either InfoMessage a -> Free f Bool
+logErrorOr fn result =
+    case result of
+        Left message ->
+            onInfo message *> return False
+
+        Right value ->
+            fn value *> return True
+
+
+doIt :: (InputConsole f, OutputConsole f, InfoFormatter f, FileStore f, FileWriter f) => ElmVersion -> WhatToDo -> Free f Bool
+doIt elmVersion whatToDo =
+    case whatToDo of
+        ValidateStdin ->
+            (validate elmVersion <$> readStdin) >>= logError
+
+        ValidateFiles first rest ->
+            all id <$> mapM validateFile (first:rest)
+            where validateFile file = (validate elmVersion <$> ElmFormat.readFile file) >>= logError
+
+        StdinToStdout ->
+            (fmap getOutputText <$> format elmVersion <$> readStdin) >>= logErrorOr OutputConsole.writeStdout
+
+        StdinToFile outputFile ->
+            (fmap getOutputText <$> format elmVersion <$> readStdin) >>= logErrorOr (FileWriter.overwriteFile outputFile)
+
+        FormatToFile inputFile outputFile ->
+            (fmap getOutputText <$> format elmVersion <$> ElmFormat.readFile inputFile) >>= logErrorOr (FileWriter.overwriteFile outputFile)
+
+        FormatInPlace first rest ->
+            do
+                canOverwrite <- approve $ FilesWillBeOverwritten (first:rest)
+                if canOverwrite
+                    then all id <$> mapM formatFile (first:rest)
+                    else return True
+            where
+                formatFile file = (format elmVersion <$> ElmFormat.readFile file) >>= logErrorOr ElmFormat.updateFile

@@ -4,17 +4,14 @@ module Reporting.Report
     ( Report(Report)
     , simple
     , toString
-    , toJson
     , printError, printWarning
     ) where
 
 import Control.Applicative ((<|>))
 import Control.Monad.Writer (Writer, execWriter, tell)
-import Data.Aeson ((.=))
-import qualified Data.Aeson.Types as Json
 import qualified Data.List.Split as Split
 import System.Console.ANSI
-import System.IO (hPutStr, stderr)
+import ElmFormat.World
 
 import qualified Reporting.Region as R
 
@@ -38,12 +35,12 @@ toString location region report source =
   execWriter (render plain location region report source)
 
 
-printError :: String -> R.Region -> Report -> String -> IO ()
+printError :: World m => String -> R.Region -> Report -> String -> m ()
 printError location region report source =
   render (ansi Error) location region report source
 
 
-printWarning :: String -> R.Region -> Report -> String -> IO ()
+printWarning :: World m => String -> R.Region -> Report -> String -> m ()
 printWarning location region report source =
   render (ansi Warning) location region report source
 
@@ -63,18 +60,6 @@ render renderer location region (Report title highlight pre post) source =
       normal renderer ("\n" ++ if null post then "\n" else post ++ "\n\n\n")
 
 
-toJson :: [Json.Pair] -> Report -> (Maybe R.Region, [Json.Pair])
-toJson extraFields (Report title subregion pre post) =
-  let
-    fields =
-      [ "tag" .= title
-      , "overview" .= pre
-      , "details" .= post
-      ]
-  in
-    (subregion, fields ++ extraFields)
-
-
 -- RENDERING
 
 data Renderer m = Renderer
@@ -92,16 +77,16 @@ plain =
 data Type = Error | Warning
 
 
-ansi :: Type -> Renderer IO
+ansi :: World m => Type -> Renderer m
 ansi tipe =
   let
     put =
-      hPutStr stderr
+      putStrStderr
 
     put' intensity color string =
-      do  hSetSGR stderr [SetColor Foreground intensity color]
+      do  putSgrStderr [SetColor Foreground intensity color]
           put string
-          hSetSGR stderr [Reset]
+          putSgrStderr [Reset]
 
     accentColor =
       case tipe of

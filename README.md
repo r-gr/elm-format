@@ -1,6 +1,5 @@
 [![Build Status](https://travis-ci.org/avh4/elm-format.svg?branch=master)](https://travis-ci.org/avh4/elm-format)
-![experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
-[![latest version: 0.4.0-alpha](https://img.shields.io/badge/version-0.4.0--alpha-blue.svg)](https://github.com/avh4/elm-format/releases/tag/0.4.0-alpha)
+[![latest version: 0.7.0-exp](https://img.shields.io/badge/version-0.7.0--exp-orange.svg)](https://github.com/avh4/elm-format/releases/tag/0.7.0-exp)
 
 # elm-format
 
@@ -8,13 +7,14 @@
 >
 > **The format produced by elm-format may change significantly before the 1.0.0 release.**  If this will cause problems for you, please refrain from using elm-format during the alpha- and beta-test periods.
 
-`elm-format` formats [Elm](http://elm-lang.org) source code according to a standard set of rules. It is inspired by the popular [gofmt](https://blog.golang.org/go-fmt-your-code).
+`elm-format` formats [Elm](http://elm-lang.org) source code according to a standard set of rules based on [the official Elm Style Guide](http://elm-lang.org/docs/style-guide). It is inspired by the popular [gofmt](https://blog.golang.org/go-fmt-your-code).
 
 The benefits of `elm-format`:
  - It makes code **easier to write**, because you never have to worry about minor formatting concerns while powering out new code.
  - It makes code **easier to read**, because there are no longer distracting minor stylistic differences between different code bases. As such, your brain can map more efficiently from source to mental model.
  - It makes code **easier to maintain**, because you can no longer have diffs related only to formatting; every diff necessarily involves a material change.
  - It **saves your team time** debating how to format things, because there is a standard tool that formats everything the same way.
+ - It **saves you time** because you don't have to nitpick over formatting details of your code.
 
 
 ## Usage
@@ -28,29 +28,30 @@ elm-format --stdin --output Main.elm  # Format input from stdin and write to fil
 elm-format --help  # See other command line options
 ```
 
-## Installation [![(latest version: 0.4.0-alpha)](https://img.shields.io/badge/version-0.4.0--alpha-blue.svg)](https://github.com/avh4/elm-format/releases/tag/0.4.0-alpha)
+
+## Installation [![(latest version: 0.7.0-exp)](https://img.shields.io/badge/version-0.7.0--exp-orange.svg)](https://github.com/avh4/elm-format/releases/tag/0.7.0-exp)
 
 > `elm-format` is still in alpha.  If you run into any problems, please [report them](https://github.com/avh4/elm-format/issues).
 >
 > **The format produced by elm-format may change significantly before the 1.0.0 release.**  If this will cause problems for you, please refrain from using elm-format during the alpha- and beta-test periods.
 
-You will need to download the version appropriate for your OS, unzip it, and place `elm-format` or `elm-format.exe` (windows) on your `PATH`.  Simpler installation options will be available once there is a stable release of elm-format.
 
-If you need PGP signatures, see the [releases page](https://github.com/avh4/elm-format/releases).
+### Experimental version
 
-### For Elm 0.17
+The latest version of `elm-format` contains experimental features that may or may not appear in future releases.
+If you are able to tolerate some amount of instability on your Elm projects,
+you can help with the development of `elm-format` by using the experimental version and providing feedback.
+You can give feedback about the latest experimental version [here](https://goo.gl/forms/kLdTN1yikfOI8ZuA3).
 
-(Using this version with Elm 0.16 files will migrate them to Elm 0.17 syntax.)
+To install the experimental version:
 
- - Mac: [download](https://github.com/avh4/elm-format/releases/download/0.4.0-alpha/elm-format-0.17-0.4.0-alpha-mac-x64.tgz)
- - Linux: [download](https://github.com/avh4/elm-format/releases/download/0.4.0-alpha/elm-format-0.17-0.4.0-alpha-linux-x64.tgz)
- - Windows: [download](https://github.com/avh4/elm-format/releases/download/0.4.0-alpha/elm-format-0.17-0.4.0-alpha-win-x64.zip)
+```sh
+npm install -g elm-format@exp
+```
 
-### For Elm 0.16
-
- - Mac: [download](https://github.com/avh4/elm-format/releases/download/0.4.0-alpha/elm-format-0.16-0.4.0-alpha-mac-x64.tgz)
- - Linux: [download](https://github.com/avh4/elm-format/releases/download/0.4.0-alpha/elm-format-0.16-0.4.0-alpha-linux-x64.tgz)
- - Windows: [download](https://github.com/avh4/elm-format/releases/download/0.4.0-alpha/elm-format-0.16-0.4.0-alpha-win-x64.zip)
+or download the version appropriate for your OS from the [release page](https://github.com/avh4/elm-format/releases/tag/0.7.0-exp),
+unzip it,
+and place `elm-format` or `elm-format.exe` (windows) on your `PATH`.
 
 
 ## Editor integration
@@ -115,22 +116,14 @@ Find your editor in the table below.  The recommended plugin for each editor is 
     <td>:warning: no installation instructions</td>
   </tr>
   <tr>
-    <td rowspan=2>Visual Studio Code</td>
+    <td rowspan=1>Visual Studio Code</td>
     <td>:trophy: <a href="https://marketplace.visualstudio.com/items?itemName=sbrink.elm">Elm Language Support</a></td>
     <td>:warning: <a href="#visual-studio-code-installation">3 steps</a></td>
-    <td>❔ TBD</td>
-    <td>:x:</td>
-    <td>❔ TBD</td>
-    <td>❔ TBD</td>
-  </tr>
-  <tr>
-    <!-- Visual Studio Code -->
-    <td><a href="https://marketplace.visualstudio.com/items?itemName=abadi199.elm-format">VSCode Elm Format</a></td>
-    <td>:warning: <a href="#vscode-elm-format-installation">3 steps</a></td>
-    <td>❔ TBD</td>
+    <td>:x: formatting moves cursor to end of file</td>
     <td>:warning: requires configuration</td>
     <td>❔ TBD</td>
     <td>❔ TBD</td>
+  </tr>
   </tr>
   <tr>
     <td rowspan=1>Sublime Text</td>
@@ -144,7 +137,7 @@ Find your editor in the table below.  The recommended plugin for each editor is 
   <tr>
     <td rowspan=1>JetBrains (WebStorm, etc)</td>
     <td>:trophy: <a href="https://durkiewicz.github.io/elm-plugin/">Elm Language Plugin</a></td>
-    <td>:warning: <a href="#jetbrains-installation">3 steps</a></td>
+    <td>:warning: <a href="#jetbrains-installation">4 steps</a></td>
     <td>❔ TBD</td>
     <td>:white_check_mark:</td>
     <td>❔ TBD</td>
@@ -167,7 +160,7 @@ The default behavior of `elm-format`-approved plugins is to format Elm files on 
     ```
     apm install elm-format
     ```
-    
+
   or use the Atom package manager in Atom's settings
 
 
@@ -179,7 +172,7 @@ The default behavior of `elm-format`-approved plugins is to format Elm files on 
     ```
     apm install atom-beautify
     ```
-    
+
   or use the Atom package manager in Atom's settings
 
 1. Use `^⌥B` (`CTRL-ALT-B`) to format a file
@@ -189,14 +182,13 @@ The default behavior of `elm-format`-approved plugins is to format Elm files on 
 
 1. Install elm-format
 1. Install the [elm-light plugin](https://github.com/rundis/elm-light) using the Light Table plugin manager
-1. Add the following to your user keymap:
-
+1. To format on save, edit your user keymap by performing the following:
+  * Click File -> Settings -> User Keymap to open the user keymap.
+  * Copy the following line and paste it into your keymap. Anywhere is fine as long as it is whithin the outer brackets. Ensure to save the file.
   ```clojure
   [:editor.elm "ctrl-s" :save :elm-format :elm.lint]
   ```
-  
-  > This step needs improvement to be understandable by novice Light Table users:
-  > how does one edit the user keymap?
+  * Search for "App: Reload keymaps" in the Commands Window to apply the changes (or restart LightTable).
 
 
 ### elm-mode installation
@@ -210,33 +202,33 @@ The default behavior of `elm-format`-approved plugins is to format Elm files on 
         (require 'package)
         (add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/"))
         ```
-        
+
     1. Install elm-mode ([official instructions](https://github.com/jcollard/elm-mode#installation)): Use `M-x list-packages` and choose `elm-mode`.
 
-1. Set `elm-format-on-save` to `t` to apply elm-format on the current buffer on every save. (The setting can be changed via `M-x customize-variable elm-format-on-save`. Click button `Toggle` to change the setting and button `State` to activate the setting.) 
+1. Set `elm-format-on-save` to `t` to apply elm-format on the current buffer on every save. (The setting can be changed via `M-x customize-variable elm-format-on-save`. Click button `Toggle` to change the setting and button `State` to activate the setting.)
 
 
 ### elm-vim installation
 
 1. Install elm-format
 1. Install [vim-plug](https://github.com/junegunn/vim-plug) ([official instructions](https://github.com/junegunn/vim-plug#installation))
-   
+
     1. Download vim-plug:
-    
+
         ```bash
         curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
             https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
         ```
- 
+
    1. Make sure there is a section like this in your `~/.vimrc`:
-   
+
         ```vim
         call plug#begin('~/.vim/plugged')
         " ... any active plugins
         call plug#end()
         ```
-   
- 
+
+
 
 1. Install elm-vim ([official instructions](https://github.com/ElmCast/elm-vim#install))
 
@@ -252,28 +244,20 @@ The default behavior of `elm-format`-approved plugins is to format Elm files on 
 
 ### Visual Studio Code installation
 
+> Note: If you previously installed a VSCode extension called "elm-format", uninstall it (it is deprecated, and the "elm" extension now provides elm-format integration).
+
 1. Install elm-format
-1. Install Elm tools for VSCode
+1. Install [Elm Language Support](https://marketplace.visualstudio.com/items?itemName=sbrink.elm) for VSCode
 
     ```bash
     ext install elm
     ```
 
-1. SHIFT-ALT-F will format the current file
+1. Configure the extension to format on save:
 
-
-### VSCode Elm Format installation
-
-1. Install elm-format
-1. Install VSCode Elm Format
-
-    ```bash
-    ext install elm-format
-    ```
-
-1. You can run elm-format by using the `Elm: Format` command
-1. You can also run elm-format whenever you save the file by adding `formatOnSave: true` option to your [settings.json](https://code.visualstudio.com/docs/customization/userandworkspace) file.
-
+    1. Go to `Preferences -> Settings` in the menu
+    1. Search the settings for `elm.formatOnSave`
+    1. Change the value of `elm.formatOnSave` to `true` in your User Settings
 
 
 ### Sublime Text installation
@@ -288,26 +272,29 @@ This is for WebStorm and other JetBrains IDEs.
 
 1. Install elm-format
 1. Install the [Elm Language Plugin](https://durkiewicz.github.io/elm-plugin/) package.
+1. Install the File Watchers plugin (available in the plugin repository)
 1. Add a file watcher for .elm files with the settings as [shown here](img/JetBrains%20setup.png).
 
 
 ## Development info
 
+Please note that this project is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
+
 ### Building from source
 
 ```bash
+brew install haskell-stack
 git clone https://github.com/avh4/elm-format.git
 cd elm-format
-cabal sandbox init
-cabal install --only-dependencies --enable-tests
-cabal build
-./dist/build/elm-format-0.17/elm-format-0.17 --help
+stack setup
+stack build
+stack install
+~/.local/bin/elm-format-0.18 --help
 ```
 
 ### Running tests
 
 ```bash
 brew install shellcheck
-cabal configure --enable-tests
 ./tests/run-tests.sh
 ```
